@@ -8,6 +8,7 @@ Node.js 定时服务：按 Cron 计划请求 Chat Completions 接口；请求失
 | --- | --- | --- | --- |
 | `DOMAIN` | 是 | - | API 域名，如 `https://api.example.com` |
 | `API_KEY` | 是 | - | Bearer Token |
+| `MODEL` | 否 | `Qwen3.6-35B-A3B-FP8` | Chat Completions 请求使用的模型名 |
 | `CONTENT` | 否 | `你好` | 用户消息内容 |
 | `RETRY_COUNT` | 否 | `3` | 首次失败后的额外重试次数；`0` 表示不重试 |
 | `CRON` | 否 | `0 10 * * *` | Cron 表达式，默认每天上午 10 点 |

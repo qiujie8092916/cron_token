@@ -44,6 +44,7 @@ function loadConfig() {
   return {
     domain,
     apiKey: required('API_KEY'),
+    model: process.env.MODEL?.trim() || 'Qwen3.6-35B-A3B-FP8',
     content: process.env.CONTENT ?? '你好',
     retryCount: nonNegativeInteger('RETRY_COUNT', 3),
     retryDelayMs: positiveInteger('RETRY_DELAY_MS', 5000),
@@ -75,7 +76,7 @@ async function requestChat(config) {
     body: JSON.stringify({
       stream: false,
       temperature: 1,
-      model: 'deepseek-v4-flash',
+      model: config.model,
       messages: [{ role: 'user', content: config.content }],
     }),
     signal: AbortSignal.timeout(config.requestTimeoutMs),
