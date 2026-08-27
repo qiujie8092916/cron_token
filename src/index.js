@@ -25,6 +25,15 @@ function booleanValue(name, fallback) {
   return raw === 'true';
 }
 
+function modelsValue() {
+  const raw = process.env.MODELS?.trim() || 'Qwen3.6-35B-A3B-FP8';
+  const models = raw.split(',').map((model) => model.trim());
+  if (models.some((model) => !model)) {
+    throw new Error('MODELS 必须是用英文逗号分隔的非空模型名列表');
+  }
+  return models;
+}
+
 function loadConfig() {
   const domain = required('DOMAIN').replace(/\/+$/, '');
   try {
@@ -44,9 +53,8 @@ function loadConfig() {
   return {
     domain,
     apiKey: required('API_KEY'),
-    model: process.env.MODEL?.trim() || 'Qwen3.6-35B-A3B-FP8',
+    models: modelsValue(),
     content: process.env.CONTENT ?? '你好',
-    retryCount: nonNegativeInteger('RETRY_COUNT', 3),
     retryDelayMs: positiveInteger('RETRY_DELAY_MS', 5000),
     requestTimeoutMs: positiveInteger('REQUEST_TIMEOUT_MS', 30000),
     schedule,
@@ -66,7 +74,7 @@ function loadConfig() {
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function requestChat(config) {
+async function requestChat(config, model) {
   const response = await fetch(`${config.domain}/v1/chat/completions`, {
     method: 'POST',
     headers: {
@@ -76,7 +84,7 @@ async function requestChat(config) {
     body: JSON.stringify({
       stream: false,
       temperature: 1,
-      model: config.model,
+      model,
       messages: [{ role: 'user', content: config.content }],
     }),
     signal: AbortSignal.timeout(config.requestTimeoutMs),
@@ -104,15 +112,16 @@ function createMailer(config) {
   return nodemailer.createTransport({ ...config.smtp, auth });
 }
 
-async function sendSuccessEmail(config, attempt) {
+async function sendSuccessEmail(config, model, modelIndex) {
   const transporter = createMailer(config);
   await transporter.sendMail({
     from: config.mailFrom,
     to: config.mailTo,
-    subject: '【Cron Token】Success ✅',
+    subject: `【Cron Token】Success ✅ ${model}`,
     text: [
-      `第 ${attempt} 次请求成功。`,
-      `此前重试次数：${attempt - 1}`,
+      `模型 ${model} 请求成功。`,
+      `模型索引：${modelIndex}`,
+      `此前失败的模型数：${modelIndex}`,
       `时间：${new Date().toISOString()}`,
       `接口：${config.domain}/v1/chat/completions`,
     ].join('\n'),
@@ -122,17 +131,19 @@ async function sendSuccessEmail(config, attempt) {
 async function sendFailureEmail(config, errors) {
   const transporter = createMailer(config);
   const attempted = errors.length;
-  const details = errors.map((error, index) => `第 ${index + 1} 次：${error}`).join('\n');
+  const details = errors
+    .map(({ model, message }, index) => `第 ${index + 1} 次（${model}）：${message}`)
+    .join('\n');
 
   await transporter.sendMail({
     from: config.mailFrom,
     to: config.mailTo,
     subject: '【Cron Token】Fail ❌',
     text: [
-      `重试了 ${Math.max(0, attempted - 1)} 次，最终失败了。`,
+      '所有配置的模型均请求失败。',
       `时间：${new Date().toISOString()}`,
       `接口：${config.domain}/v1/chat/completions`,
-      `总请求次数：${attempted}`,
+      `已尝试模型数：${attempted}`,
       '',
       '失败详情：',
       details,
@@ -150,16 +161,18 @@ async function run(config) {
 
   running = true;
   const errors = [];
-  const maxAttempts = config.retryCount + 1;
+  const totalModels = config.models.length;
 
   try {
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    for (const [modelIndex, model] of config.models.entries()) {
       try {
-        console.log(`[${new Date().toISOString()}] 开始第 ${attempt}/${maxAttempts} 次请求`);
-        const data = await requestChat(config);
-        console.log(`[${new Date().toISOString()}] 请求成功`, JSON.stringify(data));
+        console.log(
+          `[${new Date().toISOString()}] 开始请求模型 ${modelIndex + 1}/${totalModels}：${model}`,
+        );
+        const data = await requestChat(config, model);
+        console.log(`[${new Date().toISOString()}] 模型 ${model} 请求成功`, JSON.stringify(data));
         try {
-          await sendSuccessEmail(config, attempt);
+          await sendSuccessEmail(config, model, modelIndex);
           console.log(`[${new Date().toISOString()}] 成功邮件已发送`);
         } catch (error) {
           console.error(`[${new Date().toISOString()}] 成功邮件发送失败：`, error);
@@ -167,9 +180,11 @@ async function run(config) {
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        errors.push(message);
-        console.error(`[${new Date().toISOString()}] 第 ${attempt}/${maxAttempts} 次请求失败：${message}`);
-        if (attempt < maxAttempts) await sleep(config.retryDelayMs);
+        errors.push({ model, message });
+        console.error(
+          `[${new Date().toISOString()}] 模型 ${model} 请求失败：${message}`,
+        );
+        if (modelIndex < totalModels - 1) await sleep(config.retryDelayMs);
       }
     }
 
@@ -186,9 +201,15 @@ async function run(config) {
 
 function main() {
   const config = loadConfig();
-  cron.schedule(config.schedule, () => void run(config), {
+  const task = cron.schedule(config.schedule, () => run(config), {
     timezone: config.timezone,
     noOverlap: true,
+  });
+  task.on('execution:missed', ({ date }) => {
+    console.warn(
+      `[${new Date().toISOString()}] 检测到计划时间 ${date.toISOString()} 漏执行，立即补跑`,
+    );
+    return run(config);
   });
   console.log(`服务已启动；计划：${config.schedule}；时区：${config.timezone}`);
   if (config.runOnStart) {
