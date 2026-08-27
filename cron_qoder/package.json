@@ -1,0 +1,27 @@
+{
+  "name": "cron_qoder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Run scheduled text-only Qoder Agent SDK queries with ordered model fallback.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@qoder-ai/qoder-agent-sdk": "latest",
+    "dotenv": "latest",
+    "node-cron": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "latest",
+    "typescript": "latest"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
