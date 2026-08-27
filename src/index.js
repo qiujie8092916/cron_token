@@ -26,7 +26,9 @@ function booleanValue(name, fallback) {
 }
 
 function modelsValue() {
-  const raw = process.env.MODELS?.trim() || 'Qwen3.6-35B-A3B-FP8';
+  const raw = process.env.MODELS?.trim();
+  if (!raw) return null;
+
   const models = raw.split(',').map((model) => model.trim());
   if (models.some((model) => !model)) {
     throw new Error('MODELS 必须是用英文逗号分隔的非空模型名列表');
@@ -54,6 +56,7 @@ function loadConfig() {
     domain,
     apiKey: required('API_KEY'),
     models: modelsValue(),
+    modelsCount: positiveInteger('MODELS_COUNT', 5),
     content: process.env.CONTENT ?? '你好',
     retryDelayMs: positiveInteger('RETRY_DELAY_MS', 5000),
     requestTimeoutMs: positiveInteger('REQUEST_TIMEOUT_MS', 30000),
@@ -73,6 +76,57 @@ function loadConfig() {
 }
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function pricingSortValue(model) {
+  return model.quota_type === 0 ? model.model_ratio : model.model_price || 0;
+}
+
+function selectLowestPricedModels(data, count) {
+  if (!Array.isArray(data)) throw new Error('价格接口的 data 不是数组');
+
+  const models = data
+    .filter((item) => item && typeof item.model_name === 'string' && item.model_name.trim())
+    .sort((left, right) => pricingSortValue(left) - pricingSortValue(right))
+    .slice(0, count)
+    .map((item) => item.model_name.trim());
+
+  if (models.length === 0) throw new Error('价格接口没有返回可用模型');
+  return models;
+}
+
+async function requestPricingModels(config) {
+  const endpoint = `${config.domain}/api/pricing`;
+  const response = await fetch(endpoint, {
+    headers: { Authorization: `Bearer ${config.apiKey}` },
+    signal: AbortSignal.timeout(config.requestTimeoutMs),
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(`价格接口 HTTP ${response.status} ${response.statusText}: ${body.slice(0, 1000)}`);
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    throw new Error(`价格接口未返回有效 JSON：${body.slice(0, 1000)}`);
+  }
+  if (payload?.error || payload?.success === false) {
+    throw new Error(`价格接口返回错误：${JSON.stringify(payload?.error ?? payload)}`);
+  }
+  return selectLowestPricedModels(payload?.data, config.modelsCount);
+}
+
+async function resolveModels(config) {
+  if (config.models) return config.models;
+
+  const models = await requestPricingModels(config);
+  console.log(
+    `[${new Date().toISOString()}] MODELS 未配置，已从价格接口选择前 ${models.length} 个模型：${models.join(', ')}`,
+  );
+  return models;
+}
 
 async function requestChat(config, model) {
   const response = await fetch(`${config.domain}/v1/chat/completions`, {
@@ -140,7 +194,7 @@ async function sendFailureEmail(config, errors) {
     to: config.mailTo,
     subject: '【Cron Token】Fail ❌',
     text: [
-      '所有配置的模型均请求失败。',
+      '本次任务未成功完成：候选模型均请求失败，或动态模型列表获取失败。',
       `时间：${new Date().toISOString()}`,
       `接口：${config.domain}/v1/chat/completions`,
       `已尝试模型数：${attempted}`,
@@ -161,10 +215,26 @@ async function run(config) {
 
   running = true;
   const errors = [];
-  const totalModels = config.models.length;
 
   try {
-    for (const [modelIndex, model] of config.models.entries()) {
+    let models;
+    try {
+      models = await resolveModels(config);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push({ model: '动态模型发现', message });
+      console.error(`[${new Date().toISOString()}] 获取动态模型列表失败：${message}`);
+      try {
+        await sendFailureEmail(config, errors);
+        console.log(`[${new Date().toISOString()}] 告警邮件已发送`);
+      } catch (mailError) {
+        console.error(`[${new Date().toISOString()}] 告警邮件发送失败：`, mailError);
+      }
+      return;
+    }
+
+    const totalModels = models.length;
+    for (const [modelIndex, model] of models.entries()) {
       try {
         console.log(
           `[${new Date().toISOString()}] 开始请求模型 ${modelIndex + 1}/${totalModels}：${model}`,
@@ -218,9 +288,18 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  console.error('服务启动失败：', error instanceof Error ? error.message : error);
-  process.exit(1);
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    console.error('服务启动失败：', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
 }
+
+module.exports = {
+  pricingSortValue,
+  requestPricingModels,
+  resolveModels,
+  selectLowestPricedModels,
+};
