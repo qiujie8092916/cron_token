@@ -1,0 +1,23 @@
+{
+  "name": "@scheduler/qoder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./config": "./dist/config.js",
+    "./qoder-runner": "./dist/qoder-runner.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check": "tsc -b --pretty false",
+    "start": "node dist/index.js",
+    "dev": "tsx --env-file=../../env/common.env --env-file=../../env/cron-qoder.env src/index.ts"
+  },
+  "dependencies": {
+    "@qoder-ai/qoder-agent-sdk": "1.0.27",
+    "@scheduler/shared": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

@@ -1,6 +1,11 @@
 node_modules
-npm-debug.log
-.env
+**/node_modules
+dist
+**/dist
+env/*.env
+**/.env
 .git
 .gitignore
-README.md
+cron_qoder
+*.log
+.DS_Store

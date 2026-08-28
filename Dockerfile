@@ -1,14 +1,31 @@
-FROM node:22-alpine
+FROM node:22-bookworm-slim AS build
 
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV CI=true
+
+RUN corepack enable
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci --omit=dev
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY apps/scheduler-token/package.json apps/scheduler-token/package.json
+COPY apps/scheduler-qoder/package.json apps/scheduler-qoder/package.json
+RUN pnpm install --frozen-lockfile
 
-COPY src ./src
+COPY packages/shared packages/shared
+COPY apps/scheduler-token apps/scheduler-token
+COPY apps/scheduler-qoder apps/scheduler-qoder
+RUN pnpm run build && pnpm install --prod --frozen-lockfile --offline
 
+FROM node:22-bookworm-slim AS runtime-base
 ENV NODE_ENV=production
-
+WORKDIR /app
+COPY --from=build --chown=node:node /app /app
 USER node
 
-CMD ["node", "src/index.js"]
+FROM runtime-base AS scheduler-token
+CMD ["node", "apps/scheduler-token/dist/index.js"]
+
+FROM runtime-base AS scheduler-qoder
+CMD ["node", "apps/scheduler-qoder/dist/index.js"]

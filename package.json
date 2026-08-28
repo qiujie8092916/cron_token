@@ -1,19 +1,24 @@
 {
-  "name": "scheduled-chat-health-check",
+  "name": "scheduler-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "定时调用 Chat Completions 接口并在失败时发送邮件告警",
-  "main": "src/index.js",
-  "scripts": {
-    "start": "node src/index.js",
-    "check": "node --check src/index.js",
-    "test": "node --test"
-  },
+  "type": "module",
+  "description": "TypeScript schedulers for Token API and Qoder health checks.",
+  "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
-  "dependencies": {
-    "node-cron": "^4.2.1",
-    "nodemailer": "^7.0.5"
+  "scripts": {
+    "build": "tsc -b",
+    "check": "tsc -b --pretty false && tsc -p tsconfig.test.json --pretty false",
+    "clean": "tsc -b --clean",
+    "test": "pnpm run build && node --import tsx --test packages/shared/test/*.test.ts apps/scheduler-token/test/*.test.ts apps/scheduler-qoder/test/*.test.ts",
+    "dev:token": "pnpm --filter @scheduler/token dev",
+    "dev:qoder": "pnpm --filter @scheduler/qoder dev"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.0",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
   }
 }

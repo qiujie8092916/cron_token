@@ -1,0 +1,20 @@
+{
+  "name": "@scheduler/token",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./token-runner": "./dist/token-runner.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check": "tsc -b --pretty false",
+    "start": "node dist/index.js",
+    "dev": "tsx --env-file=../../env/common.env --env-file=../../env/cron-token.env src/index.ts"
+  },
+  "dependencies": {
+    "@scheduler/shared": "workspace:*"
+  }
+}

@@ -1,6 +1,18 @@
 services:
-  scheduled-chat:
-    build: .
+  scheduler-token:
+    build:
+      context: .
+      target: scheduler-token
     restart: unless-stopped
     env_file:
-      - .env
+      - env/common.env
+      - env/cron-token.env
+
+  scheduler-qoder:
+    build:
+      context: .
+      target: scheduler-qoder
+    restart: unless-stopped
+    env_file:
+      - env/common.env
+      - env/cron-qoder.env
