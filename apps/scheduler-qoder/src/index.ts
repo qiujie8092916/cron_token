@@ -1,12 +1,12 @@
 import path from "node:path";
-import { EmailReporter, formatError, Logger, startScheduler } from "@scheduler/shared";
+import { createExecutionReporter, formatError, Logger, startScheduler } from "@scheduler/shared";
 import { loadQoderConfig } from "./config.js";
 import { QoderRunner } from "./qoder-runner.js";
 
 function main(): void {
   const config = loadQoderConfig(path.resolve(process.cwd()));
-  const logger = new Logger([config.accessToken, config.mail.pass]);
-  const reporter = new EmailReporter(config.mail);
+  const logger = new Logger([config.accessToken, config.mail?.pass, config.dingtalk?.secret, config.dingtalk?.webhookUrl]);
+  const reporter = createExecutionReporter(config);
   const runner = new QoderRunner(config, logger, reporter);
 
   startScheduler({

@@ -22,6 +22,7 @@ function config(overrides: Partial<QoderConfig> = {}): QoderConfig {
     cronExpression: "0 10 * * *",
     mail: { from: "from@example.com", host: "smtp.example.com", port: 587, secure: false, to: "to@example.com" },
     models: ["first", "second"],
+    notificationChannels: ["email"],
     projectRoot: "/tmp",
     retryDelayMs: 0,
     runOnStart: false,

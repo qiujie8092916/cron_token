@@ -1,11 +1,11 @@
-import { EmailReporter, formatError, Logger, startScheduler } from "@scheduler/shared";
+import { createExecutionReporter, formatError, Logger, startScheduler } from "@scheduler/shared";
 import { loadTokenConfig } from "./config.js";
 import { TokenRunner } from "./token-runner.js";
 
 function main(): void {
   const config = loadTokenConfig();
-  const logger = new Logger([config.apiKey, config.mail.pass]);
-  const reporter = new EmailReporter(config.mail);
+  const logger = new Logger([config.apiKey, config.mail?.pass, config.dingtalk?.secret, config.dingtalk?.webhookUrl]);
+  const reporter = createExecutionReporter(config);
   const runner = new TokenRunner(config, logger, reporter);
 
   startScheduler({

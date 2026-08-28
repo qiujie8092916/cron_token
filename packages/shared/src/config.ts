@@ -10,11 +10,21 @@ export interface MailConfig {
   readonly user?: string;
 }
 
+export interface DingTalkConfig {
+  readonly atAllOnFailure: boolean;
+  readonly secret?: string;
+  readonly webhookUrl: string;
+}
+
+export type NotificationChannel = "email" | "dingtalk";
+
 export interface SchedulerConfig {
   readonly attemptTimeoutMs: number;
   readonly content: string;
   readonly cronExpression: string;
-  readonly mail: MailConfig;
+  readonly dingtalk?: DingTalkConfig;
+  readonly mail?: MailConfig;
+  readonly notificationChannels: readonly NotificationChannel[];
   readonly retryDelayMs: number;
   readonly runOnStart: boolean;
   readonly timeZone: string;
@@ -26,13 +36,30 @@ export function loadSchedulerConfig(): SchedulerConfig {
   validateCron(cronExpression);
   validateTimeZone(timeZone);
 
+  const notificationChannels = notificationChannelsEnv();
+  const mail = notificationChannels.includes("email") ? loadMailConfig() : undefined;
+  const dingtalk = notificationChannels.includes("dingtalk") ? loadDingTalkConfig() : undefined;
+
+  return {
+    attemptTimeoutMs: integerEnv("ATTEMPT_TIMEOUT_MS", 30_000, 1),
+    content: requiredEnv("CONTENT", false),
+    cronExpression,
+    ...(dingtalk ? { dingtalk } : {}),
+    ...(mail ? { mail } : {}),
+    notificationChannels,
+    retryDelayMs: integerEnv("RETRY_DELAY_MS", 5_000, 0),
+    runOnStart: booleanEnv("RUN_ON_START", false),
+    timeZone,
+  };
+}
+
+function loadMailConfig(): MailConfig {
   const user = optionalEnv("SMTP_USER");
   const pass = process.env.SMTP_PASS;
   if (user && !pass) {
     throw new Error("SMTP_PASS is required when SMTP_USER is configured.");
   }
-
-  const mail: MailConfig = {
+  return {
     from: requiredEnv("MAIL_FROM"),
     host: requiredEnv("SMTP_HOST"),
     port: integerEnv("SMTP_PORT", 587, 1),
@@ -40,16 +67,31 @@ export function loadSchedulerConfig(): SchedulerConfig {
     to: requiredEnv("MAIL_TO"),
     ...(user ? { user, pass: pass as string } : {}),
   };
+}
 
+function loadDingTalkConfig(): DingTalkConfig {
+  const webhookUrl = requiredEnv("DINGTALK_WEBHOOK_URL");
+  try {
+    const url = new URL(webhookUrl);
+    if (url.protocol !== "https:") throw new Error();
+  } catch {
+    throw new Error("DINGTALK_WEBHOOK_URL must be a valid HTTPS URL.");
+  }
+  const secret = optionalEnv("DINGTALK_SECRET");
   return {
-    attemptTimeoutMs: integerEnv("ATTEMPT_TIMEOUT_MS", 30_000, 1),
-    content: requiredEnv("CONTENT", false),
-    cronExpression,
-    mail,
-    retryDelayMs: integerEnv("RETRY_DELAY_MS", 5_000, 0),
-    runOnStart: booleanEnv("RUN_ON_START", false),
-    timeZone,
+    atAllOnFailure: booleanEnv("DINGTALK_AT_ALL_ON_FAILURE", true),
+    ...(secret ? { secret } : {}),
+    webhookUrl,
   };
+}
+
+function notificationChannelsEnv(): readonly NotificationChannel[] {
+  const raw = optionalEnv("NOTIFY_CHANNELS") ?? "email";
+  const channels = [...new Set(raw.split(",").map((value) => value.trim()).filter(Boolean))];
+  if (channels.length === 0 || channels.some((channel) => channel !== "email" && channel !== "dingtalk")) {
+    throw new Error("NOTIFY_CHANNELS must contain email, dingtalk, or both as a comma-separated list.");
+  }
+  return channels as NotificationChannel[];
 }
 
 export function requiredEnv(name: string, trim = true): string {

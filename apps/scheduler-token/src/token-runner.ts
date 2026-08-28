@@ -73,9 +73,9 @@ export class TokenRunner implements ScheduledRunner {
             timeZone: this.#config.timeZone,
             trigger,
           });
-          this.#logger.info("success email sent");
+          this.#logger.info("success notification sent");
         } catch (error) {
-          this.#logger.error(`success email failed error=${this.#logger.redact(formatError(error))}`);
+          this.#logger.error(`success notification failed error=${this.#logger.redact(formatError(error))}`);
         }
         return;
       } catch (error) {
@@ -175,9 +175,9 @@ export class TokenRunner implements ScheduledRunner {
         timeZone: this.#config.timeZone,
         trigger,
       });
-      this.#logger.info("failure email sent");
+      this.#logger.info("failure notification sent");
     } catch (error) {
-      this.#logger.error(`failure email failed error=${this.#logger.redact(formatError(error))}`);
+      this.#logger.error(`failure notification failed error=${this.#logger.redact(formatError(error))}`);
     }
   }
 }
