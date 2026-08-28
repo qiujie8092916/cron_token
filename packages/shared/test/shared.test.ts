@@ -67,6 +67,10 @@ test("HTML success mail escapes content, truncates it, and includes preceding fa
     trigger: "cron",
   });
   assert.equal(message.subject, "【Scheduler Qoder】Success ✅ second");
+  assert.match(message.html, />服务</);
+  assert.match(message.html, />成功模型</);
+  assert.match(message.html, />用户</);
+  assert.match(message.html, />助手</);
   assert.match(message.html, /bad &lt;response&gt;/);
   assert.doesNotMatch(message.html, /<script>/);
   assert.match(message.html, /答{100}…/);
@@ -84,6 +88,7 @@ test("failure mail excludes user and assistant fields", () => {
     trigger: "missed",
   });
   assert.equal(message.subject, "【Scheduler Token】Failed ❌");
-  assert.doesNotMatch(message.html, />user</);
-  assert.doesNotMatch(message.html, />assistant</);
+  assert.doesNotMatch(message.html, />用户</);
+  assert.doesNotMatch(message.html, />助手</);
+  assert.match(message.html, />失败详情</);
 });

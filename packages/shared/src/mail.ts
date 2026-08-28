@@ -90,19 +90,19 @@ export function renderSuccessEmail(report: SuccessReport): { readonly html: stri
   return {
     subject: `【Scheduler ${report.service}】Success ✅ ${subjectValue(report.model)}`,
     html: page("Execution succeeded", "success", [
-      row("Service", report.service),
-      row("Trigger", report.trigger),
-      row("Configured models", report.configuredModels.join(", ")),
-      row("Successful model", report.model),
-      row("Attempt number", String(report.attemptNumber)),
-      row("Previous failed attempts", String(report.failures.length)),
-      row("Previous failure details", precedingFailures, true),
-      ...(report.endpoint ? [row("Endpoint", report.endpoint)] : []),
-      row("Started", formatInTimeZone(report.startedAt, report.timeZone)),
-      row("Finished", formatInTimeZone(report.endedAt, report.timeZone)),
-      row("Elapsed", `${report.elapsedMs} ms`),
-      row("user", truncate(report.prompt, 100), false, true),
-      row("assistant", truncate(report.answer, 100), false, true),
+      row("服务", report.service),
+      row("触发方式", report.trigger),
+      row("配置模型", report.configuredModels.join(", ")),
+      row("成功模型", report.model),
+      row("尝试序号", String(report.attemptNumber)),
+      row("前序失败次数", String(report.failures.length)),
+      row("前序失败详情", precedingFailures, true),
+      ...(report.endpoint ? [row("接口地址", report.endpoint)] : []),
+      row("开始时间", formatInTimeZone(report.startedAt, report.timeZone)),
+      row("结束时间", formatInTimeZone(report.endedAt, report.timeZone)),
+      row("总耗时", `${report.elapsedMs} ms`),
+      row("用户", truncate(report.prompt, 100), false, true),
+      row("助手", truncate(report.answer, 100), false, true),
     ]),
   };
 }
@@ -111,16 +111,16 @@ export function renderFailureEmail(report: FailureReport): { readonly html: stri
   return {
     subject: `【Scheduler ${report.service}】Failed ❌`,
     html: page("Execution failed", "failed", [
-      row("Service", report.service),
-      row("Trigger", report.trigger),
-      row("Configured models", report.configuredModels.join(", ")),
-      row("Attempted models", report.failures.map((failure) => failure.model).join(", ")),
-      row("Attempt count", String(report.failures.length)),
-      row("Failure details", failureList(report.failures), true),
-      ...(report.endpoint ? [row("Endpoint", report.endpoint)] : []),
-      row("Started", formatInTimeZone(report.startedAt, report.timeZone)),
-      row("Finished", formatInTimeZone(report.endedAt, report.timeZone)),
-      row("Elapsed", `${report.elapsedMs} ms`),
+      row("服务", report.service),
+      row("触发方式", report.trigger),
+      row("配置模型", report.configuredModels.join(", ")),
+      row("已尝试模型", report.failures.map((failure) => failure.model).join(", ")),
+      row("尝试次数", String(report.failures.length)),
+      row("失败详情", failureList(report.failures), true),
+      ...(report.endpoint ? [row("接口地址", report.endpoint)] : []),
+      row("开始时间", formatInTimeZone(report.startedAt, report.timeZone)),
+      row("结束时间", formatInTimeZone(report.endedAt, report.timeZone)),
+      row("总耗时", `${report.elapsedMs} ms`),
     ]),
   };
 }
@@ -129,10 +129,10 @@ export function renderSkippedEmail(report: SkippedReport): { readonly html: stri
   return {
     subject: `【Scheduler ${report.service}】Skipped ⏭️`,
     html: page("Execution skipped", "skipped", [
-      row("Service", report.service),
-      row("Trigger", report.trigger),
-      row("Reason", "The previous execution is still running."),
-      row("Time", formatInTimeZone(report.time, report.timeZone)),
+      row("服务", report.service),
+      row("触发方式", report.trigger),
+      row("跳过原因", "上一次任务仍在执行。"),
+      row("时间", formatInTimeZone(report.time, report.timeZone)),
     ]),
   };
 }

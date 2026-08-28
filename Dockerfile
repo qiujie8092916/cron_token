@@ -20,6 +20,10 @@ RUN pnpm run build && pnpm install --prod --frozen-lockfile --offline
 
 FROM node:22-bookworm-slim AS runtime-base
 ENV NODE_ENV=production
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && update-ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build --chown=node:node /app /app
 USER node
