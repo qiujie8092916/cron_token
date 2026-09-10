@@ -98,3 +98,25 @@ test("Qoder runner applies timeout independently to one model attempt", async ()
   assert.equal(mail.reports.failures.length, 1);
   assert.match(mail.reports.failures[0]?.failures[0]?.error ?? "", /AttemptTimeoutError/);
 });
+
+test("Qoder runner reports a timeout when the SDK iterator and interrupt never settle", async () => {
+  const mail = reporter();
+  const never = new Promise<never>(() => {});
+  let receivedController: AbortController | undefined;
+  const factory: QoderQueryFactory = (_model, _prompt, _projectRoot, _logger, abortController) => {
+    receivedController = abortController;
+    return {
+      async interrupt() { await never; },
+      [Symbol.asyncIterator]() {
+        return { next: () => never };
+      },
+    };
+  };
+  const runner = new QoderRunner(config({ attemptTimeoutMs: 5, models: ["stuck"] }), new Logger(), mail, factory);
+
+  await runner.run("cron");
+
+  assert.equal(receivedController?.signal.aborted, true);
+  assert.equal(mail.reports.failures.length, 1);
+  assert.match(mail.reports.failures[0]?.failures[0]?.error ?? "", /AttemptTimeoutError/);
+});

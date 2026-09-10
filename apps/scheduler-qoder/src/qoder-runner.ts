@@ -1,5 +1,6 @@
 import { accessTokenFromEnv, query } from "@qoder-ai/qoder-agent-sdk";
 import {
+  abortReason,
   type ExecutionReporter,
   formatError,
   Logger,
@@ -34,7 +35,15 @@ interface QoderMessage {
 export interface QoderQuery extends AsyncIterable<QoderMessage> {
   interrupt(): Promise<void>;
 }
-export type QoderQueryFactory = (model: string, prompt: string, projectRoot: string, logger: Logger) => QoderQuery;
+export type QoderQueryFactory = (
+  model: string,
+  prompt: string,
+  projectRoot: string,
+  logger: Logger,
+  abortController: AbortController,
+) => QoderQuery;
+
+const MAX_INTERRUPT_WAIT_MS = 5_000;
 
 export class QoderRunner implements ScheduledRunner {
   readonly #config: QoderConfig;
@@ -137,21 +146,23 @@ export class QoderRunner implements ScheduledRunner {
       void this.#interruptQuery("timeout");
     }, this.#config.attemptTimeoutMs);
     try {
-      return await this.#runModel(model, controller.signal);
-    } catch (error) {
-      if (controller.signal.aborted && controller.signal.reason instanceof Error) {
-        throw controller.signal.reason;
-      }
-      throw error;
+      return await raceWithAbort(this.#runModel(model, controller), controller.signal);
     } finally {
       clearTimeout(timeout);
       if (this.#activeController === controller) this.#activeController = undefined;
     }
   }
 
-  async #runModel(model: string, signal: AbortSignal): Promise<string> {
+  async #runModel(model: string, controller: AbortController): Promise<string> {
+    const signal = controller.signal;
     throwIfAborted(signal);
-    const currentQuery = this.#queryFactory(model, this.#config.content, this.#config.projectRoot, this.#logger);
+    const currentQuery = this.#queryFactory(
+      model,
+      this.#config.content,
+      this.#config.projectRoot,
+      this.#logger,
+      controller,
+    );
     this.#activeQuery = currentQuery;
     try {
       for await (const message of currentQuery) {
@@ -182,7 +193,11 @@ export class QoderRunner implements ScheduledRunner {
     const currentQuery = this.#activeQuery;
     if (!currentQuery) return;
     try {
-      await currentQuery.interrupt();
+      await withTimeout(
+        currentQuery.interrupt(),
+        Math.min(MAX_INTERRUPT_WAIT_MS, this.#config.attemptTimeoutMs),
+        `Qoder interrupt exceeded its timeout reason=${reason}`,
+      );
       this.#logger.info(`qoder query interrupted reason=${reason}`);
     } catch (error) {
       this.#logger.warn(`qoder interrupt failed reason=${reason} error=${this.#logger.redact(formatError(error))}`);
@@ -190,10 +205,17 @@ export class QoderRunner implements ScheduledRunner {
   }
 }
 
-function createQoderQuery(model: string, prompt: string, projectRoot: string, logger: Logger): QoderQuery {
+function createQoderQuery(
+  model: string,
+  prompt: string,
+  projectRoot: string,
+  logger: Logger,
+  abortController: AbortController,
+): QoderQuery {
   return query({
     prompt,
     options: {
+      abortController,
       auth: accessTokenFromEnv("ACCESS_TOKEN"),
       cwd: projectRoot,
       model,
@@ -207,4 +229,39 @@ function createQoderQuery(model: string, prompt: string, projectRoot: string, lo
       },
     },
   }) as QoderQuery;
+}
+
+function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortReason(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    operation.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
